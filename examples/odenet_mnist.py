@@ -1,5 +1,3 @@
-# test wget
-
 import os
 import argparse
 import logging
@@ -21,11 +19,9 @@ parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False]
 parser.add_argument('--lr', type=float, default=0.1)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--test_batch_size', type=int, default=1000)
-
 parser.add_argument('--save', type=str, default='./experiment1')
 parser.add_argument('--debug', action='store_true')
 parser.add_argument('--gpu', type=int, default=0)
-
 parser.add_argument('--method', type=str, default='dopri5', choices=['dopri5', 'euler', 'rk4', 'explicit_adams', 'implicit_adams'])
 args = parser.parse_args()
 
@@ -34,20 +30,16 @@ if args.adjoint:
 else:
     from torchdiffeq import odeint
 
-
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
-
 
 def conv1x1(in_planes, out_planes, stride=1):
     """1x1 convolution"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
-
 def norm(dim):
     return nn.GroupNorm(min(32, dim), dim)
-
 
 class ResBlock(nn.Module):
     expansion = 1
@@ -76,7 +68,6 @@ class ResBlock(nn.Module):
 
         return out + shortcut
 
-
 class ConcatConv2d(nn.Module):
 
     def __init__(self, dim_in, dim_out, ksize=3, stride=1, padding=0, dilation=1, groups=1, bias=True, transpose=False):
@@ -91,7 +82,6 @@ class ConcatConv2d(nn.Module):
         tt = torch.ones_like(x[:, :1, :, :]) * t
         ttx = torch.cat([tt, x], 1)
         return self._layer(ttx)
-
 
 class ODEfunc(nn.Module):
 
@@ -116,7 +106,6 @@ class ODEfunc(nn.Module):
         out = self.norm3(out)
         return out
 
-
 class ODEBlock(nn.Module):
 
     def __init__(self, odefunc):
@@ -137,7 +126,6 @@ class ODEBlock(nn.Module):
     def nfe(self, value):
         self.odefunc.nfe = value
 
-
 class Flatten(nn.Module):
 
     def __init__(self):
@@ -146,7 +134,6 @@ class Flatten(nn.Module):
     def forward(self, x):
         shape = torch.prod(torch.tensor(x.shape[1:])).item()
         return x.view(-1, shape)
-
 
 class RunningAverageMeter(object):
     """Computes and stores the average and current value"""
@@ -165,7 +152,6 @@ class RunningAverageMeter(object):
         else:
             self.avg = self.avg * self.momentum + val * (1 - self.momentum)
         self.val = val
-
 
 def get_svhn_loaders(data_aug=False, batch_size=128, test_batch_size=1000, perc=1.0):
     if data_aug:
@@ -203,8 +189,6 @@ def get_svhn_loaders(data_aug=False, batch_size=128, test_batch_size=1000, perc=
 
     return train_loader, test_loader, train_eval_loader
 
-
-
 def inf_generator(iterable):
     """Allows training with DataLoaders in a single infinite loop:
         for i, (x, y) in enumerate(inf_generator(train_loader)):
@@ -216,12 +200,11 @@ def inf_generator(iterable):
         except StopIteration:
             iterator = iterable.__iter__()
 
-
 def learning_rate_with_decay(batch_size, batch_denom, batches_per_epoch, boundary_epochs, decay_rates):
     initial_learning_rate = args.lr * batch_size / batch_denom
 
     boundaries = [int(batches_per_epoch * epoch) for epoch in boundary_epochs]
-    vals = [initial_learning_rate * decay for decay in decay_rates]
+    vals = [initial_learning_rate * decay for decay in decay rates]
 
     def learning_rate_fn(itr):
         lt = [itr < b for b in boundaries] + [True]
@@ -230,10 +213,8 @@ def learning_rate_with_decay(batch_size, batch_denom, batches_per_epoch, boundar
 
     return learning_rate_fn
 
-
 def one_hot(x, K):
     return np.array(x[:, None] == np.arange(K)[None, :], dtype=int)
-
 
 def accuracy(model, dataset_loader):
     total_correct = 0
@@ -246,15 +227,12 @@ def accuracy(model, dataset_loader):
         total_correct += np.sum(predicted_class == target_class)
     return total_correct / len(dataset_loader.dataset)
 
-
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 
 def makedirs(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
-
 
 def get_logger(logpath, filepath, package_files=[], displaying=True, saving=True, debug=False):
     logger = logging.getLogger()
@@ -282,7 +260,6 @@ def get_logger(logpath, filepath, package_files=[], displaying=True, saving=True
 
     return logger
 
-
 if __name__ == '__main__':
     makedirs(args.save)
     logger = get_logger(logpath=os.path.join(args.save, 'logs'), filepath=os.path.abspath(__file__))
@@ -294,16 +271,16 @@ if __name__ == '__main__':
 
     if args.downsampling_method == 'conv':
         downsampling_layers = [
-            nn.Conv2d(3, 64, 3, 1, 1),
+            nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
             norm(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, 4, 2, 1),  # Increased the number of filters
+            nn.Conv2d(64, 128, 4, 2, 1),  # Reduce 32x32 to 16x16, increase to 128 channels
             norm(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 4, 2, 1),
+            nn.Conv2d(128, 128, 4, 2, 1),  # Reduce 16x16 to 8x8
             norm(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 4, 2, 1)
+            nn.Conv2d(128, 128, 4, 2, 1)  # Reduce 8x8 to 4x4
         ]
     elif args.downsampling_method == 'res':
         downsampling_layers = [
@@ -311,18 +288,18 @@ if __name__ == '__main__':
             norm(64),
             nn.ReLU(inplace=True),
             ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 32x32 to 16x16
-            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 16x16 to 8x8
-            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 8x8 to 4x4
+            ResBlock(64, 128, stride=2, downsample=conv1x1(64, 128, 2)),  # Increase channels to 128
+            ResBlock(128, 128, stride=2, downsample=conv1x1(128, 128, 2)),  # Reduce 16x16 to 8x8
         ]
 
-    feature_layers = [ODEBlock(ODEfunc(64))] if is_odenet else [ResBlock(64, 64) for _ in range(6)]
+    feature_layers = [ODEBlock(ODEfunc(128))] if is_odenet else [ResBlock(128, 128) for _ in range(6)]
     fc_layers = [
-    norm(64), 
-    nn.ReLU(inplace=True), 
-    nn.AdaptiveAvgPool2d((1, 1)), 
-    Flatten(), 
-    nn.Linear(64, 10),
-    nn.Dropout(p=0.5)  # Adding dropout
+        norm(128),  # Match the number of channels
+        nn.ReLU(inplace=True),
+        nn.AdaptiveAvgPool2d((1, 1)),
+        Flatten(),
+        nn.Linear(128, 10),
+        nn.Dropout(p=0.5)  # Adding dropout
     ]
     model = nn.Sequential(*downsampling_layers, *feature_layers, *fc_layers).to(device)
 
@@ -360,7 +337,13 @@ if __name__ == '__main__':
         x, y = data_gen.__next__()
         x = x.to(device)
         y = y.to(device)
+        
+        print(f"Input shape: {x.shape}")  # Debug print
+        
         logits = model(x)
+        
+        print(f"Logits shape: {logits.shape}")  # Debug print
+        
         loss = criterion(logits, y)
 
         if is_odenet:
