@@ -24,7 +24,7 @@ parser.add_argument('--save', type=str, default='./experiment1')
 parser.add_argument('--debug', action='store_true')
 parser.add_argument('--gpu', type=int, default=0)
 
-parser.add_argument('--method', type=str, default='dopri5', choices=['dopri5', 'euler', 'rk4', 'explicit_adams', 'implicit_adams'])
+parser.add_argument('--method', type=str, default='dopri5', choices=['dopri5', 'dopri8', 'euler', 'rk4', 'explicit_adams', 'implicit_adams'])
 args = parser.parse_args()
 
 if args.adjoint:
