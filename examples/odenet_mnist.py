@@ -282,7 +282,6 @@ def get_logger(logpath, filepath, package_files=[], displaying=True, saving=True
 
 
 if __name__ == '__main__':
-
     makedirs(args.save)
     logger = get_logger(logpath=os.path.join(args.save, 'logs'), filepath=os.path.abspath(__file__))
     logger.info(args)
@@ -292,28 +291,27 @@ if __name__ == '__main__':
     is_odenet = args.network == 'odenet'
 
     if args.downsampling_method == 'conv':
-    downsampling_layers = [
-        nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
-        norm(64),
-        nn.ReLU(inplace=True),
-        nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 32x32 to 16x16
-        norm(64),
-        nn.ReLU(inplace=True),
-        nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 16x16 to 8x8
-        norm(64),
-        nn.ReLU(inplace=True),
-        nn.Conv2d(64, 64, 4, 2, 1)   # Reduce 8x8 to 4x4
-    ]
-elif args.downsampling_method == 'res':
-    downsampling_layers = [
-        nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
-        norm(64),
-        nn.ReLU(inplace=True),
-        ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 32x32 to 16x16
-        ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 16x16 to 8x8
-        ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 8x8 to 4x4
-    ]
-
+        downsampling_layers = [
+            nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
+            norm(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 32x32 to 16x16
+            norm(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 16x16 to 8x8
+            norm(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 4, 2, 1)   # Reduce 8x8 to 4x4
+        ]
+    elif args.downsampling_method == 'res':
+        downsampling_layers = [
+            nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
+            norm(64),
+            nn.ReLU(inplace=True),
+            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 32x32 to 16x16
+            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 16x16 to 8x8
+            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 8x8 to 4x4
+        ]
 
     feature_layers = [ODEBlock(ODEfunc(64))] if is_odenet else [ResBlock(64, 64) for _ in range(6)]
     fc_layers = [norm(64), nn.ReLU(inplace=True), nn.AdaptiveAvgPool2d((1, 1)), Flatten(), nn.Linear(64, 10)]
@@ -326,7 +324,7 @@ elif args.downsampling_method == 'res':
     criterion = nn.CrossEntropyLoss().to(device)
 
     train_loader, test_loader, train_eval_loader = get_svhn_loaders(
-    args.data_aug, args.batch_size, args.test_batch_size
+        args.data_aug, args.batch_size, args.test_batch_size
     )
 
     data_gen = inf_generator(train_loader)
@@ -388,3 +386,4 @@ elif args.downsampling_method == 'res':
                         b_nfe_meter.avg, train_acc, val_acc
                     )
                 )
+
