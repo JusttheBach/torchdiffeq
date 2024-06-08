@@ -292,16 +292,16 @@ if __name__ == '__main__':
 
     if args.downsampling_method == 'conv':
         downsampling_layers = [
-            nn.Conv2d(3, 64, 3, 1, 1),
+            nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
             norm(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, 4, 2, 1),  # Increased the number of filters
-            norm(128),
+            nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 32x32 to 16x16
+            norm(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 4, 2, 1),
-            norm(128),
+            nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 16x16 to 8x8
+            norm(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 4, 2, 1)
+            nn.Conv2d(64, 64, 4, 2, 1)   # Reduce 8x8 to 4x4
         ]
     elif args.downsampling_method == 'res':
         downsampling_layers = [
