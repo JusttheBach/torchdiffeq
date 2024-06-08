@@ -292,16 +292,16 @@ if __name__ == '__main__':
 
     if args.downsampling_method == 'conv':
         downsampling_layers = [
-            nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
+            nn.Conv2d(3, 64, 3, 1, 1),
             norm(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 32x32 to 16x16
-            norm(64),
+            nn.Conv2d(64, 128, 4, 2, 1),  # Increased the number of filters
+            norm(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 4, 2, 1),  # Reduce 16x16 to 8x8
-            norm(64),
+            nn.Conv2d(128, 128, 4, 2, 1),
+            norm(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 4, 2, 1)   # Reduce 8x8 to 4x4
+            nn.Conv2d(128, 128, 4, 2, 1)
         ]
     elif args.downsampling_method == 'res':
         downsampling_layers = [
@@ -314,8 +314,14 @@ if __name__ == '__main__':
         ]
 
     feature_layers = [ODEBlock(ODEfunc(64))] if is_odenet else [ResBlock(64, 64) for _ in range(6)]
-    fc_layers = [norm(64), nn.ReLU(inplace=True), nn.AdaptiveAvgPool2d((1, 1)), Flatten(), nn.Linear(64, 10)]
-
+    fc_layers = [
+    norm(64), 
+    nn.ReLU(inplace=True), 
+    nn.AdaptiveAvgPool2d((1, 1)), 
+    Flatten(), 
+    nn.Linear(64, 10),
+    nn.Dropout(p=0.5)  # Adding dropout
+    ]
     model = nn.Sequential(*downsampling_layers, *feature_layers, *fc_layers).to(device)
 
     logger.info(model)
@@ -335,7 +341,7 @@ if __name__ == '__main__':
         decay_rates=[1, 0.1, 0.01, 0.001]
     )
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     best_acc = 0
     batch_time_meter = RunningAverageMeter()
