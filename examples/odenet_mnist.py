@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default='odenet')
@@ -19,11 +20,9 @@ parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False]
 parser.add_argument('--lr', type=float, default=0.1)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--test_batch_size', type=int, default=1000)
-
 parser.add_argument('--save', type=str, default='./experiment1')
 parser.add_argument('--debug', action='store_true')
 parser.add_argument('--gpu', type=int, default=0)
-
 parser.add_argument('--method', type=str, default='dopri5', choices=['dopri5', 'dopri8', 'euler', 'rk4', 'explicit_adams', 'implicit_adams'])
 args = parser.parse_args()
 
@@ -32,20 +31,16 @@ if args.adjoint:
 else:
     from torchdiffeq import odeint
 
-
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
-
 
 def conv1x1(in_planes, out_planes, stride=1):
     """1x1 convolution"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
-
 def norm(dim):
-    return nn.GroupNorm(min(32, dim), dim)
-
+    return nn.BatchNorm2d(dim)
 
 class ResBlock(nn.Module):
     expansion = 1
@@ -74,7 +69,6 @@ class ResBlock(nn.Module):
 
         return out + shortcut
 
-
 class ConcatConv2d(nn.Module):
 
     def __init__(self, dim_in, dim_out, ksize=3, stride=1, padding=0, dilation=1, groups=1, bias=True, transpose=False):
@@ -89,7 +83,6 @@ class ConcatConv2d(nn.Module):
         tt = torch.ones_like(x[:, :1, :, :]) * t
         ttx = torch.cat([tt, x], 1)
         return self._layer(ttx)
-
 
 class ODEfunc(nn.Module):
 
@@ -114,7 +107,6 @@ class ODEfunc(nn.Module):
         out = self.norm3(out)
         return out
 
-
 class ODEBlock(nn.Module):
 
     def __init__(self, odefunc):
@@ -135,7 +127,6 @@ class ODEBlock(nn.Module):
     def nfe(self, value):
         self.odefunc.nfe = value
 
-
 class Flatten(nn.Module):
 
     def __init__(self):
@@ -144,7 +135,6 @@ class Flatten(nn.Module):
     def forward(self, x):
         shape = torch.prod(torch.tensor(x.shape[1:])).item()
         return x.view(-1, shape)
-
 
 class RunningAverageMeter(object):
     """Computes and stores the average and current value"""
@@ -164,12 +154,13 @@ class RunningAverageMeter(object):
             self.avg = self.avg * self.momentum + val * (1 - self.momentum)
         self.val = val
 
-
 def get_svhn_loaders(data_aug=False, batch_size=128, test_batch_size=1000, perc=1.0):
     if data_aug:
         transform_train = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            transforms.RandomRotation(10),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])
@@ -201,8 +192,6 @@ def get_svhn_loaders(data_aug=False, batch_size=128, test_batch_size=1000, perc=
 
     return train_loader, test_loader, train_eval_loader
 
-
-
 def inf_generator(iterable):
     """Allows training with DataLoaders in a single infinite loop:
         for i, (x, y) in enumerate(inf_generator(train_loader)):
@@ -213,7 +202,6 @@ def inf_generator(iterable):
             yield iterator.__next__()
         except StopIteration:
             iterator = iterable.__iter__()
-
 
 def learning_rate_with_decay(batch_size, batch_denom, batches_per_epoch, boundary_epochs, decay_rates):
     initial_learning_rate = args.lr * batch_size / batch_denom
@@ -228,10 +216,8 @@ def learning_rate_with_decay(batch_size, batch_denom, batches_per_epoch, boundar
 
     return learning_rate_fn
 
-
 def one_hot(x, K):
     return np.array(x[:, None] == np.arange(K)[None, :], dtype=int)
-
 
 def accuracy(model, dataset_loader):
     total_correct = 0
@@ -244,15 +230,12 @@ def accuracy(model, dataset_loader):
         total_correct += np.sum(predicted_class == target_class)
     return total_correct / len(dataset_loader.dataset)
 
-
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 
 def makedirs(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
-
 
 def get_logger(logpath, filepath, package_files=[], displaying=True, saving=True, debug=False):
     logger = logging.getLogger()
@@ -280,7 +263,6 @@ def get_logger(logpath, filepath, package_files=[], displaying=True, saving=True
 
     return logger
 
-
 if __name__ == '__main__':
     makedirs(args.save)
     logger = get_logger(logpath=os.path.join(args.save, 'logs'), filepath=os.path.abspath(__file__))
@@ -295,31 +277,31 @@ if __name__ == '__main__':
             nn.Conv2d(3, 64, 3, 1, 1),
             norm(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, 4, 2, 1),  # Increased the number of filters
+            nn.Conv2d(64, 128, 4, 2, 1),
             norm(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 4, 2, 1),
-            norm(128),
+            nn.Conv2d(128, 256, 4, 2, 1),
+            norm(256),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 4, 2, 1)
+            nn.Conv2d(256, 256, 4, 2, 1)
         ]
     elif args.downsampling_method == 'res':
         downsampling_layers = [
             nn.Conv2d(3, 64, 3, 1, 1),  # Change input channels to 3
             norm(64),
             nn.ReLU(inplace=True),
-            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 32x32 to 16x16
-            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 16x16 to 8x8
-            ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),  # Reduce 8x8 to 4x4
+            ResBlock(64, 128, stride=2, downsample=conv1x1(64, 128, 2)),  # Reduce 32x32 to 16x16
+            ResBlock(128, 256, stride=2, downsample=conv1x1(128, 256, 2)),  # Reduce 16x16 to 8x8
+            ResBlock(256, 256, stride=2, downsample=conv1x1(256, 256, 2)),  # Reduce 8x8 to 4x4
         ]
 
-    feature_layers = [ODEBlock(ODEfunc(128))] if is_odenet else [ResBlock(128, 128) for _ in range(6)]
+    feature_layers = [ODEBlock(ODEfunc(256))] if is_odenet else [ResBlock(256, 256) for _ in range(6)]
     fc_layers = [
-        norm(128), 
+        norm(256), 
         nn.ReLU(inplace=True), 
         nn.AdaptiveAvgPool2d((1, 1)), 
         Flatten(), 
-        nn.Linear(128, 10),
+        nn.Linear(256, 10),
         nn.Dropout(p=0.5)  # Adding dropout
     ]
 
@@ -337,59 +319,54 @@ if __name__ == '__main__':
     data_gen = inf_generator(train_loader)
     batches_per_epoch = len(train_loader)
 
-    lr_fn = learning_rate_with_decay(
-        args.batch_size, batch_denom=128, batches_per_epoch=batches_per_epoch, boundary_epochs=[60, 100, 140],
-        decay_rates=[1, 0.1, 0.01, 0.001]
-    )
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.nepochs)
+    
     best_acc = 0
     batch_time_meter = RunningAverageMeter()
     f_nfe_meter = RunningAverageMeter()
     b_nfe_meter = RunningAverageMeter()
     end = time.time()
 
-    for itr in range(args.nepochs * batches_per_epoch):
+    for epoch in range(args.nepochs):
+        model.train()
+        for itr in range(batches_per_epoch):
+            optimizer.zero_grad()
+            x, y = data_gen.__next__()
+            x = x.to(device)
+            y = y.to(device)
+            logits = model(x)
+            loss = criterion(logits, y)
 
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr_fn(itr)
+            if is_odenet:
+                nfe_forward = feature_layers[0].nfe
+                feature_layers[0].nfe = 0
 
-        optimizer.zero_grad()
-        x, y = data_gen.__next__()
-        x = x.to(device)
-        y = y.to(device)
-        logits = model(x)
-        loss = criterion(logits, y)
+            loss.backward()
+            optimizer.step()
 
-        if is_odenet:
-            nfe_forward = feature_layers[0].nfe
-            feature_layers[0].nfe = 0
+            if is_odenet:
+                nfe_backward = feature_layers[0].nfe
+                feature_layers[0].nfe = 0
 
-        loss.backward()
-        optimizer.step()
+            batch_time_meter.update(time.time() - end)
+            if is_odenet:
+                f_nfe_meter.update(nfe_forward)
+                b_nfe_meter.update(nfe_backward)
+            end = time.time()
 
-        if is_odenet:
-            nfe_backward = feature_layers[0].nfe
-            feature_layers[0].nfe = 0
+        scheduler.step()
 
-        batch_time_meter.update(time.time() - end)
-        if is_odenet:
-            f_nfe_meter.update(nfe_forward)
-            b_nfe_meter.update(nfe_backward)
-        end = time.time()
-
-        if itr % batches_per_epoch == 0:
-            with torch.no_grad():
-                train_acc = accuracy(model, train_eval_loader)
-                val_acc = accuracy(model, test_loader)
-                if val_acc > best_acc:
-                    torch.save({'state_dict': model.state_dict(), 'args': args}, os.path.join(args.save, 'model.pth'))
-                    best_acc = val_acc
-                logger.info(
-                    "Epoch {:04d} | Time {:.3f} ({:.3f}) | NFE-F {:.1f} | NFE-B {:.1f} | "
-                    "Train Acc {:.4f} | Test Acc {:.4f}".format(
-                        itr // batches_per_epoch, batch_time_meter.val, batch_time_meter.avg, f_nfe_meter.avg,
-                        b_nfe_meter.avg, train_acc, val_acc
-                    )
+        with torch.no_grad():
+            train_acc = accuracy(model, train_eval_loader)
+            val_acc = accuracy(model, test_loader)
+            if val_acc > best_acc:
+                torch.save({'state_dict': model.state_dict(), 'args': args}, os.path.join(args.save, 'model.pth'))
+                best_acc = val_acc
+            logger.info(
+                "Epoch {:04d} | Time {:.3f} ({:.3f}) | NFE-F {:.1f} | NFE-B {:.1f} | "
+                "Train Acc {:.4f} | Test Acc {:.4f}".format(
+                    epoch, batch_time_meter.val, batch_time_meter.avg, f_nfe_meter.avg,
+                    b_nfe_meter.avg, train_acc, val_acc
                 )
+            )
