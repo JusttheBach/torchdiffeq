@@ -302,7 +302,7 @@ if __name__ == '__main__':
         nn.AdaptiveAvgPool2d((1, 1)), 
         Flatten(), 
         nn.Linear(256, 10),
-        nn.Dropout(p=0.5)  # Adding dropout
+        nn.Dropout(p=0.5, inplace=True)  # Adding dropout
     ]
 
     model = nn.Sequential(*downsampling_layers, *feature_layers, *fc_layers).to(device)
